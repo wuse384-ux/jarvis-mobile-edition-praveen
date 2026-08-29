@@ -1,171 +1,116 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+const chat = document.getElementById('chat');
+const input = document.getElementById('msg');
+const sendButton = document.getElementById('send');
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Orbitron', sans-serif;
-  }
+function add(text, who) {
+const d = document.createElement('div');
 
-body {
-background: #000;
-color: #0ff;
-padding: 20px;
+d.className = 'msg ' + who;
+d.innerText = text;
+
+chat.appendChild(d);
+
+chat.scrollTop = chat.scrollHeight;
+
+return d;
+
 }
 
-/* HEADER */
+function getJarvisResponse(message) {
 
-header {
-text-align: center;
+const text = message.toLowerCase();
+
+if (text.includes('hello') || text.includes('hi')) {
+    return 'Hello, Boss. J.A.R.V.I.S is online and ready to assist you.';
 }
 
-header h1 {
-letter-spacing: 6px;
-text-shadow: 0 0 12px #0ff;
+if (text.includes('your name') || text.includes('who are you')) {
+    return 'I am J.A.R.V.I.S, your personal mobile assistant.';
 }
 
-header p {
-font-size: 10px;
-letter-spacing: 4px;
-opacity: 0.6;
+if (text.includes('status')) {
+    return 'All primary systems are online, Boss.';
 }
 
-/* JARVIS CORE */
-
-.core {
-position: relative;
-width: 160px;
-height: 160px;
-margin: 25px auto;
+if (text.includes('time')) {
+    return 'The current time is ' +
+        new Date().toLocaleTimeString();
 }
 
-.ring {
-position: absolute;
-border: 2px solid #0ff;
-border-radius: 50%;
-box-shadow: 0 0 15px #0ff;
+if (text.includes('date')) {
+    return 'Today is ' +
+        new Date().toLocaleDateString();
 }
 
-.r1 {
-inset: 0;
-border-top-color: transparent;
-animation: spin 3s linear infinite;
+if (text.includes('thank')) {
+    return 'Always happy to assist you, Boss.';
 }
 
-.r2 {
-inset: 20px;
-border-bottom-color: transparent;
-animation: spin 2s linear infinite reverse;
+return 'I am currently running in local mode. AI connection will be added soon, Boss.';
+
 }
 
-.center {
-position: absolute;
-inset: 50px;
-background: #0ff;
-border-radius: 50%;
-box-shadow: 0 0 30px #0ff;
-animation: pulse 1.5s infinite;
+function sendMessage() {
+
+const t = input.value.trim();
+
+if (!t) return;
+
+
+// USER MESSAGE
+
+add('YOU: ' + t, 'user');
+
+input.value = '';
+
+
+// JARVIS PROCESSING MESSAGE
+
+const processing = add(
+    'J.A.R.V.I.S: Processing...',
+    'ai'
+);
+
+
+// RESPONSE
+
+setTimeout(() => {
+
+    processing.innerText =
+        'J.A.R.V.I.S: ' +
+        getJarvisResponse(t);
+
+    chat.scrollTop = chat.scrollHeight;
+
+}, 700);
+
 }
 
-@keyframes spin {
-to {
-transform: rotate(360deg);
-}
-}
+// SEND BUTTON
 
-@keyframes pulse {
-50% {
-opacity: 0.4;
-}
-}
+sendButton.onclick = sendMessage;
 
-.core-text {
-text-align: center;
-font-size: 11px;
-letter-spacing: 3px;
+// ENTER KEY
+
+input.addEventListener('keydown', (event) => {
+
+if (event.key === 'Enter') {
+    sendMessage();
 }
 
-/* SYSTEM STATUS */
+});
 
-.status {
-border: 1px solid rgba(0, 255, 255, 0.3);
-background: rgba(0, 255, 255, 0.05);
-padding: 12px;
-margin: 20px 0;
-}
+// START MESSAGE
 
-.status h2 {
-font-size: 12px;
-letter-spacing: 2px;
-margin-bottom: 8px;
-}
+window.onload = () => {
 
-.row {
-display: flex;
-justify-content: space-between;
-font-size: 11px;
-margin: 6px 0;
-}
+setTimeout(() => {
 
-.on {
-color: #0f0;
-}
+    add(
+        'J.A.R.V.I.S: Systems online. How may I assist you, Boss?',
+        'ai'
+    );
 
-.off {
-color: #f00;
-}
+}, 500);
 
-/* CHAT */
-
-.chat {
-border: 1px solid rgba(0, 255, 255, 0.3);
-height: 150px;
-overflow-y: auto;
-padding: 10px;
-font-size: 12px;
-}
-
-.msg {
-margin: 6px 0;
-padding: 6px;
-border-left: 2px solid #0ff;
-background: rgba(0, 255, 255, 0.08);
-}
-
-.msg.user {
-border-left-color: #fff;
-}
-
-/* INPUT AREA */
-
-.input-area {
-display: flex;
-gap: 8px;
-margin-top: 12px;
-}
-
-input {
-flex: 1;
-background: #000;
-border: 1px solid #0ff;
-color: #0ff;
-padding: 10px;
-outline: none;
-}
-
-input:focus {
-box-shadow: 0 0 10px #0ff;
-}
-
-button {
-background: #0ff;
-color: #000;
-border: none;
-padding: 10px 16px;
-font-weight: bold;
-cursor: pointer;
-}
-
-button:active {
-transform: scale(0.95);
-}
+};
