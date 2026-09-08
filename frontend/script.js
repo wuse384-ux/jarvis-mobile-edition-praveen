@@ -1,116 +1,144 @@
-const chat = document.getElementById('chat');
-const input = document.getElementById('msg');
-const sendButton = document.getElementById('send');
-
-function add(text, who) {
-const d = document.createElement('div');
-
-d.className = 'msg ' + who;
-d.innerText = text;
-
-chat.appendChild(d);
-
-chat.scrollTop = chat.scrollHeight;
-
-return d;
-
+// ===== 1. API KEY (Safe: browser ల
+ో మ
+ాత్రమ
+ే
+)
+=
+====
+let API_KEY = localStorage.getItem(
+'ja
+r
+vis
+_k
+ey
+')
+;
+if(!API_KEY){
+API_KEY = prompt('Enter your Gemini API Key:');
+if(API_KEY) localStorage.setItem('jarvis_key', API_KEY);
 }
-
-function getJarvisResponse(message) {
-
-const text = message.toLowerCase();
-
-if (text.includes('hello') || text.includes('hi')) {
-    return 'Hello, Boss. J.A.R.V.I.S is online and ready to assist you.';
+// ===== 2. SMART MODELS (ఒ
+కటిfa
+il
+అ
+యి
+తే
+n
+e
+x
+t
+a
+u
+t
+o
+t
+r
+y
+)
+=====
+const MODELS = ["gemini-3.6-f
+lash",
+"
+g
+em
+in
+i-
+f
+la
+s
+h
+-
+la
+t
+e
+s
+t
+"
+];
+const chat=document.getElementById('chat');
+const input=document.getElementById('msg');
+const micBtn=document.getElementById('mic-btn');
+// ===== 3. GEMINI BRAIN (auto-fallback) =====
+async function callGemini(p){let lastErr;
+for(const m of MODELS){
+try{
+const res=await fetch(
+"https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="
++API_KEY,
+{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({contents:[{parts:[{text:p}]}]})});
+const data=await res.json();
+if(data.error){
+lastErr=new Error(data.error.message);
+if(/high demand|temporar|quota|rate|unavailable|no longer
+available|deprecated/i.test(data.error.message)) continue;
+throw lastErr;
 }
-
-if (text.includes('your name') || text.includes('who are you')) {
-    return 'I am J.A.R.V.I.S, your personal mobile assistant.';
+return data.candidates[0].content.parts[0].text;
+}catch(e){ lastErr=e; }
 }
-
-if (text.includes('status')) {
-    return 'All primary systems are online, Boss.';
+throw lastErr;
 }
-
-if (text.includes('time')) {
-    return 'The current time is ' +
-        new Date().toLocaleTimeString();
+async function askGemini(p){
+add('J.A.R.V.I.S: Thinking...','ai');
+try{
+const reply=await callGemini(p);
+chat.lastChild.innerText='J.A.R.V.I.S: '+reply;
+speak(reply); // reply వచ్చి న వెంటనేVOICE
+}catch(e){
+chat.lastChild.innerText='J.A.R.V.I.S: ERROR - '+e.message;
 }
-
-if (text.includes('date')) {
-    return 'Today is ' +
-        new Date().toLocaleDateString();
 }
-
-if (text.includes('thank')) {
-    return 'Always happy to assist you, Boss.';
+// ===== 4. SPEECH RECOGNITION (విన
+డం)
+=
+=
+=
+=
+=
+const SR=window.SpeechRecognition||
+w
+indow
+.
+w
+e
+b
+k
+itSpeechRecognition;
+const rec=new SR(); rec.lang='en-US'; // Telugu క
+ి
+'
+t
+e
+-
+IN
+'
+rec.onresult=(e)=>{const t=e.results[0][0].transcr
+ip
+t
+;
+a
+d
+d(
+'YOU: '+t,'user');askGemini(t);};
+micBtn.onclick=()=>{rec.start();micBtn.innerText='LISTENING...';};
+rec.onend=()=>{micBtn.innerText='🎙';};
+// ===== 5. TEXT-TO-SPEECH (మాట్లాడటం) =====
+let voices=[];
+function loadVoices(){ voices=speechSynthesis.getVoices(); }
+loadVoices();
+speechSynthesis.onvoiceschanged=loadVoices;
+function speak(t){
+const u=new SpeechSynthesisUtterance(t);
+    u.rate=1.05; u.pitch=0.85;
+const v=voices.find(v=>v.lang.startsWith('en'));
+if(v) u.voice=v;
+speechSynthesis.speak(u);
 }
-
-return 'I am currently running in local mode. AI connection will be added soon, Boss.';
-
-}
-
-function sendMessage() {
-
-const t = input.value.trim();
-
-if (!t) return;
-
-
-// USER MESSAGE
-
-add('YOU: ' + t, 'user');
-
-input.value = '';
-
-
-// JARVIS PROCESSING MESSAGE
-
-const processing = add(
-    'J.A.R.V.I.S: Processing...',
-    'ai'
-);
-
-
-// RESPONSE
-
-setTimeout(() => {
-
-    processing.innerText =
-        'J.A.R.V.I.S: ' +
-        getJarvisResponse(t);
-
-    chat.scrollTop = chat.scrollHeight;
-
-}, 700);
-
-}
-
-// SEND BUTTON
-
-sendButton.onclick = sendMessage;
-
-// ENTER KEY
-
-input.addEventListener('keydown', (event) => {
-
-if (event.key === 'Enter') {
-    sendMessage();
-}
-
-});
-
-// START MESSAGE
-
-window.onload = () => {
-
-setTimeout(() => {
-
-    add(
-        'J.A.R.V.I.S: Systems online. How may I assist you, Boss?',
-        'ai'
-    );
-
-}, 500);
-
+// ===== 6. TEXT SEND BUTTON =====
+document.getElementById('send').onclick=()=>{
+const t=input.value.trim(); if(!t)return;
+add('YOU: '+t,'user'); input.value=''; askGemini(t);
 };
+function add(t,w){const d=document.createElement('div');d.className='msg
+'+w;d.innerText=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
