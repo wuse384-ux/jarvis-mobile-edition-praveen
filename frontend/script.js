@@ -1,10 +1,10 @@
 
 "use strict";
 
-// ========================================
-// J.A.R.V.I.S. — MOBILE EDITION
-// Telugu AI + Voice + Text
-// ========================================
+// ==========================================
+// J.A.R.V.I.S. MOBILE EDITION
+// Telugu AI | Text | Voice | Error Recovery
+// ==========================================
 
 // 1. HTML ELEMENTS
 const chat = document.getElementById("chat");
@@ -13,7 +13,7 @@ const sendBtn = document.getElementById("send");
 const micBtn = document.getElementById("mic-btn");
 
 // 2. GEMINI CONFIGURATION
-// Keep the model that worked for your account.
+// Keep the model you previously confirmed was working.
 const MODEL = "gemini-3.5-flash-lite";
 
 let API_KEY = localStorage.getItem("jarvis_key") || "";
@@ -21,7 +21,7 @@ let busy = false;
 let recognition = null;
 let listening = false;
 
-// 3. CHAT MESSAGE DISPLAY
+// 3. CHAT DISPLAY
 function add(text, type = "ai") {
   const div = document.createElement("div");
   div.className = "msg " + type;
@@ -33,15 +33,13 @@ function add(text, type = "ai") {
   return div;
 }
 
-// 4. GET GEMINI API KEY
+// 4. API KEY
 function getApiKey() {
   if (API_KEY) return API_KEY;
 
   const key = prompt("Enter your Gemini API key:");
 
-  if (!key || !key.trim()) {
-    return "";
-  }
+  if (!key || !key.trim()) return "";
 
   API_KEY = key.trim();
   localStorage.setItem("jarvis_key", API_KEY);
@@ -49,7 +47,12 @@ function getApiKey() {
   return API_KEY;
 }
 
-// 5. CONNECT TO GEMINI
+// 5. WAIT HELPER
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// 6. GEMINI REQUEST WITH CONTROLLED RETRIES
 async function callGemini(message) {
   const key = getApiKey();
 
@@ -62,67 +65,142 @@ async function callGemini(message) {
     MODEL +
     ":generateContent";
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": key
+  const requestBody = {
+    system_instruction: {
+      parts: [{
+        text:
+          "You are J.A.R.V.I.S., a helpful personal AI assistant. " +
+          "Reply in natural conversational Telugu using Telugu script by default. " +
+          "Keep technical terms in English when useful. " +
+          "If the user asks for another language, use that language. " +
+          "Be friendly, clear, honest, and concise. " +
+          "Never claim to perform a phone action unless it actually happened."
+      }]
     },
-    body: JSON.stringify({
-      system_instruction: {
-        parts: [{
-          text:
-            "You are J.A.R.V.I.S., a helpful personal AI assistant. " +
-            "Reply in natural, conversational Telugu (తెలుగు) by default. " +
-            "Use Telugu script. Keep technical terms in English when useful. " +
-            "If the user explicitly requests another language, use that language. " +
-            "Be friendly, clear, honest, and concise. " +
-            "Never claim to have performed a device action unless it actually happened."
-        }]
-      },
-      contents: [{
-        role: "user",
-        parts: [{ text: message }]
-      }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024
+    contents: [{
+      role: "user",
+      parts: [{ text: message }]
+    }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024
+    }
+  };
+
+  const maxAttempts = 3;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let response;
+
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": key
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (error) {
+      lastError = new Error(
+        "Network error. Check your internet connection."
+      );
+
+      if (attempt < maxAttempts) {
+        await wait(1000 * Math.pow(2, attempt - 1));
+        continue;
       }
-    })
-  });
 
-  let data;
+      throw lastError;
+    }
 
-  try {
-    data = await response.json();
-  } catch {
-    throw new Error("Could not read the Gemini response.");
+    let data;
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(
+        "Gemini returned an unreadable response."
+      );
+    }
+
+    if (response.ok) {
+      const reply = data.candidates?.[0]?.content?.parts
+        ?.map(part => part.text || "")
+        .join("")
+        .trim();
+
+      if (!reply) {
+        throw new Error(
+          data.promptFeedback?.blockReason
+            ? "Request blocked: " +
+              data.promptFeedback.blockReason
+            : "Gemini returned no text. Please try again."
+        );
+      }
+
+      return reply;
+    }
+
+    const apiMessage =
+      data.error?.message || "Gemini request failed.";
+
+    const retryable =
+      response.status === 429 ||
+      response.status === 500 ||
+      response.status === 502 ||
+      response.status === 503 ||
+      response.status === 504;
+
+    lastError = new Error(apiMessage);
+
+    // Do not retry permanent errors such as invalid
+    // requests, invalid keys, or permission errors.
+    if (!retryable) {
+      if (response.status === 400) {
+        throw new Error("Bad request: " + apiMessage);
+      }
+
+      if (response.status === 401 ||
+          response.status === 403) {
+        throw new Error(
+          "API key or permission error. Check your Gemini API key and project."
+        );
+      }
+
+      if (response.status === 404) {
+        throw new Error(
+          "Model not found. Check the model ID in script.js."
+        );
+      }
+
+      if (response.status === 429) {
+        throw new Error(
+          "Gemini quota or rate limit reached. Try again later."
+        );
+      }
+
+      throw new Error(apiMessage);
+    }
+
+    // Exponential backoff: about 1 second, then 2 seconds.
+    if (attempt < maxAttempts) {
+      const delay =
+        1000 * Math.pow(2, attempt - 1) +
+        Math.floor(Math.random() * 500);
+
+      await wait(delay);
+    }
   }
 
-  if (!response.ok) {
-    throw new Error(
-      data.error?.message || "Gemini request failed."
-    );
-  }
-
-  const reply = data.candidates?.[0]?.content?.parts
-    ?.map(part => part.text || "")
-    .join("")
-    .trim();
-
-  if (!reply) {
-    throw new Error(
-      data.promptFeedback?.blockReason
-        ? "The request was blocked: " +
-          data.promptFeedback.blockReason
-        : "Gemini returned no text. Please try again."
-    );
-  }
-
-  return reply;
+  throw new Error(
+    "Gemini is still busy after 3 attempts. Please wait a little and try again. " +
+    (lastError?.message || "")
+  );
 }
 
-// 6. ASK J.A.R.V.I.S.
+// 7. ASK J.A.R.V.I.S.
 async function askGemini(message) {
   const thinking = add(
     "J.A.R.V.I.S: ఆలోచిస్తున్నాను...",
@@ -134,23 +212,25 @@ async function askGemini(message) {
 
     thinking.textContent = "J.A.R.V.I.S: " + reply;
 
-    // Speak the Telugu response
     speak(reply);
   } catch (error) {
     thinking.textContent =
-      "J.A.R.V.I.S ERROR: " + error.message;
+      "J.A.R.V.I.S ERROR: " +
+      (error.message || "Something went wrong.");
+
+    console.error("J.A.R.V.I.S error:", error);
   }
 }
 
-// 7. SEND MESSAGE
+// 8. SEND MESSAGE
 async function sendMessage() {
   const message = input.value.trim();
 
   if (!message || busy) return;
 
   add("YOU: " + message, "user");
-
   input.value = "";
+
   busy = true;
   sendBtn.disabled = true;
 
@@ -171,7 +251,7 @@ input.addEventListener("keydown", event => {
   }
 });
 
-// 8. MICROPHONE INPUT
+// 9. MICROPHONE INPUT
 const SpeechRecognition =
   window.SpeechRecognition ||
   window.webkitSpeechRecognition;
@@ -237,13 +317,13 @@ if (SpeechRecognition) {
 } else {
   micBtn.addEventListener("click", () => {
     add(
-      "ఈ బ్రౌజర్‌లో voice recognition అందుబాటులో లేదు. Chromeలో మళ్లీ ప్రయత్నించండి.",
+      "Voice recognition is unavailable in this browser. Try Chrome or type your message.",
       "ai"
     );
   });
 }
 
-// 9. FIND A TELUGU TEXT-TO-SPEECH VOICE
+// 10. FIND A TELUGU VOICE
 function getTeluguVoice() {
   if (!("speechSynthesis" in window)) {
     return null;
@@ -256,26 +336,19 @@ function getTeluguVoice() {
   ) || null;
 }
 
-// 10. SPEAK AI RESPONSES
+// 11. SPEAK AI RESPONSES
 function speak(text) {
-  if (!("speechSynthesis" in window)) {
-    add(
-      "Text-to-speech is not supported in this browser.",
-      "ai"
-    );
-    return;
-  }
+  if (!("speechSynthesis" in window)) return;
 
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
-  const teluguVoice = getTeluguVoice();
+  const voice = getTeluguVoice();
 
-  if (teluguVoice) {
-    utterance.voice = teluguVoice;
-    utterance.lang = teluguVoice.lang;
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
   } else {
-    // Ask the browser to use a Telugu voice if available.
     utterance.lang = "te-IN";
   }
 
@@ -293,14 +366,14 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
-// Some browsers load voices asynchronously.
+// Some browsers load voice lists asynchronously.
 if ("speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = () => {
     getTeluguVoice();
   };
 }
 
-// 11. START J.A.R.V.I.S.
+// 12. STARTUP
 add(
   "నమస్కారం! J.A.R.V.I.S. సిద్ధంగా ఉంది. నన్ను ఏదైనా అడగండి.",
   "ai"
