@@ -1,10 +1,10 @@
 
 "use strict";
 
-// ==========================================
+// ============================================
 // J.A.R.V.I.S. MOBILE EDITION
-// Telugu AI | Text | Voice | Error Recovery
-// ==========================================
+// Telugu AI + Text Chat + Voice + Model Fallback
+// ============================================
 
 // 1. HTML ELEMENTS
 const chat = document.getElementById("chat");
@@ -12,16 +12,31 @@ const input = document.getElementById("msg");
 const sendBtn = document.getElementById("send");
 const micBtn = document.getElementById("mic-btn");
 
-// 2. GEMINI CONFIGURATION
-// Keep the model you previously confirmed was working.
-const MODEL = "gemini-3.5-flash-lite";
+if (!chat || !input || !sendBtn || !micBtn) {
+  throw new Error(
+    "J.A.R.V.I.S. could not find a required HTML element. " +
+    "Check the IDs: chat, msg, send, mic-btn."
+  );
+}
 
-let API_KEY = localStorage.getItem("jarvis_key") || "";
+// 2. GEMINI MODELS
+// J.A.R.V.I.S. tries these in order if a model fails.
+const MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite"
+];
+
+const API_BASE =
+  "https://generativelanguage.googleapis.com/v1beta/models/";
+
+let apiKey = "";
 let busy = false;
 let recognition = null;
 let listening = false;
 
-// 3. CHAT DISPLAY
+// 3. SHOW CHAT MESSAGES
 function add(text, type = "ai") {
   const div = document.createElement("div");
   div.className = "msg " + type;
@@ -33,48 +48,63 @@ function add(text, type = "ai") {
   return div;
 }
 
-// 4. API KEY
+// 4. GET THE API KEY
 function getApiKey() {
-  if (API_KEY) return API_KEY;
+  if (apiKey) return apiKey;
 
-  const key = prompt("Enter your Gemini API key:");
+  try {
+    apiKey = localStorage.getItem("jarvis_key") || "";
+  } catch (error) {
+    console.warn("Could not read saved API key:", error);
+  }
 
-  if (!key || !key.trim()) return "";
+  if (apiKey) return apiKey;
 
-  API_KEY = key.trim();
-  localStorage.setItem("jarvis_key", API_KEY);
+  const enteredKey = prompt(
+    "Enter your Gemini API key. Do not share it with anyone:"
+  );
 
-  return API_KEY;
+  if (!enteredKey || !enteredKey.trim()) {
+    return "";
+  }
+
+  apiKey = enteredKey.trim();
+
+  try {
+    localStorage.setItem("jarvis_key", apiKey);
+  } catch (error) {
+    console.warn("Could not save API key in this browser:", error);
+  }
+
+  return apiKey;
 }
 
-// 5. WAIT HELPER
+// 5. WAIT BEFORE RETRYING
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 6. GEMINI REQUEST WITH CONTROLLED RETRIES
+// 6. CALL GEMINI WITH AUTOMATIC MODEL FALLBACK
 async function callGemini(message) {
   const key = getApiKey();
 
   if (!key) {
-    throw new Error("API key not entered.");
+    throw new Error(
+      "No API key entered. Refresh the page and enter your Gemini API key."
+    );
   }
-
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/" +
-    MODEL +
-    ":generateContent";
 
   const requestBody = {
     system_instruction: {
       parts: [{
         text:
           "You are J.A.R.V.I.S., a helpful personal AI assistant. " +
-          "Reply in natural conversational Telugu using Telugu script by default. " +
-          "Keep technical terms in English when useful. " +
-          "If the user asks for another language, use that language. " +
-          "Be friendly, clear, honest, and concise. " +
-          "Never claim to perform a phone action unless it actually happened."
+          "Reply in natural, conversational Telugu using Telugu script by default. " +
+          "Keep technical words in English when useful. " +
+          "If the user requests another language, use that language. " +
+          "Give clear, practical answers suitable for a beginner. " +
+          "Be honest about your abilities. " +
+          "Never claim that you performed a phone action unless it actually happened."
       }]
     },
     contents: [{
@@ -87,142 +117,161 @@ async function callGemini(message) {
     }
   };
 
-  const maxAttempts = 3;
-  let lastError;
+  const failures = [];
+  const maxAttemptsPerModel = 2;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    let response;
+  for (const model of MODELS) {
+    let tryNextModel = false;
 
-    try {
-      response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": key
-        },
-        body: JSON.stringify(requestBody)
-      });
-    } catch (error) {
-      lastError = new Error(
-        "Network error. Check your internet connection."
-      );
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
+      let response;
 
-      if (attempt < maxAttempts) {
-        await wait(1000 * Math.pow(2, attempt - 1));
-        continue;
+      try {
+        response = await fetch(
+          API_BASE + model + ":generateContent",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": key
+            },
+            body: JSON.stringify(requestBody)
+          }
+        );
+      } catch (error) {
+        if (attempt < maxAttemptsPerModel) {
+          await wait(1000 * attempt);
+          continue;
+        }
+
+        failures.push(model + ": network connection failed");
+        tryNextModel = true;
+        break;
       }
 
-      throw lastError;
-    }
+      let data = {};
 
-    let data;
+      try {
+        data = await response.json();
+      } catch (error) {
+        failures.push(model + ": unreadable server response");
+        tryNextModel = true;
+        break;
+      }
 
-    try {
-      data = await response.json();
-    } catch {
+      // SUCCESS
+      if (response.ok) {
+        const reply = data.candidates?.[0]?.content?.parts
+          ?.map(part => part.text || "")
+          .join("")
+          .trim();
+
+        if (reply) {
+          return {
+            reply: reply,
+            model: model
+          };
+        }
+
+        const blockReason = data.promptFeedback?.blockReason;
+
+        failures.push(
+          model + ": " +
+          (blockReason
+            ? "request blocked (" + blockReason + ")"
+            : "no text was returned")
+        );
+
+        tryNextModel = true;
+        break;
+      }
+
+      const status = response.status;
+      const apiMessage =
+        data.error?.message || response.statusText || "Unknown API error";
+
+      // The same bad API key or permission issue will not be
+      // repaired by trying a different model.
+      if (status === 401 || status === 403) {
+        throw new Error(
+          "API key or permission error. Check your key and its " +
+          "project access in Google AI Studio. Details: " + apiMessage
+        );
+      }
+
+      if (status === 400) {
+        throw new Error("Gemini rejected the request: " + apiMessage);
+      }
+
+      // A model can be unavailable, overloaded, or rate-limited.
+      // Retry temporary errors, then try the next model.
+      if (status === 404) {
+        failures.push(model + ": model unavailable (404)");
+        tryNextModel = true;
+        break;
+      }
+
+      const retryableStatuses = [429, 500, 502, 503, 504];
+
+      if (retryableStatuses.includes(status)) {
+        if (attempt < maxAttemptsPerModel) {
+          const delay = 1000 * Math.pow(2, attempt - 1);
+          const jitter = Math.floor(Math.random() * 500);
+
+          await wait(delay + jitter);
+          continue;
+        }
+
+        failures.push(
+          model + ": HTTP " + status + " — " + apiMessage
+        );
+
+        tryNextModel = true;
+        break;
+      }
+
       throw new Error(
-        "Gemini returned an unreadable response."
+        "Gemini HTTP " + status + ": " + apiMessage
       );
     }
 
-    if (response.ok) {
-      const reply = data.candidates?.[0]?.content?.parts
-        ?.map(part => part.text || "")
-        .join("")
-        .trim();
-
-      if (!reply) {
-        throw new Error(
-          data.promptFeedback?.blockReason
-            ? "Request blocked: " +
-              data.promptFeedback.blockReason
-            : "Gemini returned no text. Please try again."
-        );
-      }
-
-      return reply;
-    }
-
-    const apiMessage =
-      data.error?.message || "Gemini request failed.";
-
-    const retryable =
-      response.status === 429 ||
-      response.status === 500 ||
-      response.status === 502 ||
-      response.status === 503 ||
-      response.status === 504;
-
-    lastError = new Error(apiMessage);
-
-    // Do not retry permanent errors such as invalid
-    // requests, invalid keys, or permission errors.
-    if (!retryable) {
-      if (response.status === 400) {
-        throw new Error("Bad request: " + apiMessage);
-      }
-
-      if (response.status === 401 ||
-          response.status === 403) {
-        throw new Error(
-          "API key or permission error. Check your Gemini API key and project."
-        );
-      }
-
-      if (response.status === 404) {
-        throw new Error(
-          "Model not found. Check the model ID in script.js."
-        );
-      }
-
-      if (response.status === 429) {
-        throw new Error(
-          "Gemini quota or rate limit reached. Try again later."
-        );
-      }
-
-      throw new Error(apiMessage);
-    }
-
-    // Exponential backoff: about 1 second, then 2 seconds.
-    if (attempt < maxAttempts) {
-      const delay =
-        1000 * Math.pow(2, attempt - 1) +
-        Math.floor(Math.random() * 500);
-
-      await wait(delay);
+    if (tryNextModel) {
+      console.warn("J.A.R.V.I.S. switching from model:", model);
     }
   }
 
   throw new Error(
-    "Gemini is still busy after 3 attempts. Please wait a little and try again. " +
-    (lastError?.message || "")
+    "All configured Gemini models failed.\n\n" +
+    failures.join("\n") +
+    "\n\nThis may be a temporary Gemini service problem, " +
+    "an API limit, or model access issue. Wait briefly and try again. " +
+    "If it continues, check your API key, project and API usage."
   );
 }
 
 // 7. ASK J.A.R.V.I.S.
 async function askGemini(message) {
-  const thinking = add(
-    "J.A.R.V.I.S: ఆలోచిస్తున్నాను...",
-    "ai"
-  );
+  const thinking = add("J.A.R.V.I.S: ఆలోచిస్తున్నాను...", "ai");
 
   try {
-    const reply = await callGemini(message);
+    const result = await callGemini(message);
 
-    thinking.textContent = "J.A.R.V.I.S: " + reply;
+    thinking.textContent =
+      "J.A.R.V.I.S (" + result.model + "): " + result.reply;
 
-    speak(reply);
+    speak(result.reply);
+
+    console.log("J.A.R.V.I.S used model:", result.model);
   } catch (error) {
     thinking.textContent =
-      "J.A.R.V.I.S ERROR: " +
+      "J.A.R.V.I.S ERROR:\n" +
       (error.message || "Something went wrong.");
 
     console.error("J.A.R.V.I.S error:", error);
   }
 }
 
-// 8. SEND MESSAGE
+// 8. SEND A TEXT MESSAGE
 async function sendMessage() {
   const message = input.value.trim();
 
@@ -239,13 +288,14 @@ async function sendMessage() {
   } finally {
     busy = false;
     sendBtn.disabled = false;
+    input.focus();
   }
 }
 
 sendBtn.addEventListener("click", sendMessage);
 
 input.addEventListener("keydown", event => {
-  if (event.key === "Enter") {
+  if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendMessage();
   }
@@ -276,7 +326,7 @@ if (SpeechRecognition) {
 
     try {
       recognition.start();
-    } catch {
+    } catch (error) {
       add(
         "మైక్రోఫోన్ ప్రారంభం కాలేదు. మళ్లీ ప్రయత్నించండి.",
         "ai"
@@ -301,10 +351,13 @@ if (SpeechRecognition) {
   };
 
   recognition.onerror = event => {
-    if (event.error !== "no-speech" &&
-        event.error !== "aborted") {
+    if (
+      event.error !== "no-speech" &&
+      event.error !== "aborted"
+    ) {
       add(
-        "Microphone error: " + event.error,
+        "Microphone error: " + event.error +
+        ". You can type your message instead.",
         "ai"
       );
     }
@@ -317,7 +370,8 @@ if (SpeechRecognition) {
 } else {
   micBtn.addEventListener("click", () => {
     add(
-      "Voice recognition is unavailable in this browser. Try Chrome or type your message.",
+      "Voice recognition is not supported in this browser. " +
+      "Try Chrome or type your message.",
       "ai"
     );
   });
@@ -338,18 +392,19 @@ function getTeluguVoice() {
 
 // 11. SPEAK AI RESPONSES
 function speak(text) {
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window)) {
+    return;
+  }
 
   window.speechSynthesis.cancel();
 
   const utterance = new SpeechSynthesisUtterance(text);
   const voice = getTeluguVoice();
 
+  utterance.lang = voice ? voice.lang : "te-IN";
+
   if (voice) {
     utterance.voice = voice;
-    utterance.lang = voice.lang;
-  } else {
-    utterance.lang = "te-IN";
   }
 
   utterance.rate = 0.9;
@@ -357,8 +412,10 @@ function speak(text) {
   utterance.volume = 1.0;
 
   utterance.onerror = event => {
-    if (event.error !== "canceled" &&
-        event.error !== "interrupted") {
+    if (
+      event.error !== "canceled" &&
+      event.error !== "interrupted"
+    ) {
       console.warn("Speech error:", event.error);
     }
   };
@@ -366,15 +423,11 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
-// Some browsers load voice lists asynchronously.
-if ("speechSynthesis" in window) {
-  window.speechSynthesis.onvoiceschanged = () => {
-    getTeluguVoice();
-  };
-}
-
-// 12. STARTUP
+// 12. INITIAL GREETING
 add(
-  "నమస్కారం! J.A.R.V.I.S. సిద్ధంగా ఉంది. నన్ను ఏదైనా అడగండి.",
+  "నమస్కారం! J.A.R.V.I.S. సిద్ధంగా ఉంది. " +
+  "నన్ను తెలుగులో లేదా ఇంగ్లీష్‌లో ఏదైనా అడగండి.",
   "ai"
 );
+
+console.log("J.A.R.V.I.S. ready.");
