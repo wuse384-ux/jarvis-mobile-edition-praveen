@@ -8,7 +8,7 @@ const micBtn = document.getElementById("mic-btn");
 
 // ===== GEMINI CONFIGURATION =====
 // Use a model available in your Google AI Studio account.
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-3.1-flash-lite";
 
 let API_KEY = localStorage.getItem("jarvis_key") || "";
 
