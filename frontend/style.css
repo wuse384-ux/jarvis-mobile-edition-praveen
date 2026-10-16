@@ -1,18 +1,310 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap'); *{margin:0;
-padding:0;box-sizing:border-box;font-family:'Orbitron',sans-serif} body{background:#000;color:#0ff;padding:20p
-x;overflow-x:hidden} header{text-align:center} header h1{letter-spacing:6px;text-shadow:0 0 12px #0ff} header
-p{font-size:10px;letter-spacing:4px;opacity:.6} .core{position:relative;width:160px;height:160px;margin:25px a
-uto} .ring{position:absolute;border:2px solid #0ff;border-radius:50%;box-shadow:0 0 15px #0ff} .r1{inset:0;bor
-der-top-color:transparent;animation:spin 3s linear infinite} .r2{inset:20px;border-bottom-color:transparent;an
-imation:spin 2s linear infinite reverse} .center{position:absolute;inset:50px;background:#0ff;border-radius:5
-0%;box-shadow:0 0 30px #0ff;animation:pulse 1.5s infinite} @keyframes spin{to{transform:rotate(360deg)}} @keyf
-rames pulse{50%{opacity:.4}} .core-text{text-align:center;font-size:11px;letter-spacing:3px} .status{border:1p
-x solid rgba(0,255,255,.3);background:rgba(0,255,255,.05);padding:12px;margin:20px 0} .status h2{font-size:12p
-x;letter-spacing:2px;margin-bottom:8px} .row{display:flex;justify-content:space-between;gap:8px;font-size:11p
-x;margin:6px 0} .on{color:#0f0}.off{color:#f00} .chat{border:1px solid rgba(0,255,255,.3);height:150px;overflo
-w-y:auto;padding:10px;font-size:12px} .msg{margin:6px 0;padding:6px;border-left:2px solid #0ff;background:rgba
-(0,255,255,.08)} .msg.user{border-left-color:#fff} .input-area{display:flex;flex-wrap:wrap;gap:8px;margin-top:
-12px} input{flex:1 1 220px;min-width:0;background:#000;border:1px solid #0ff;color:#0ff;padding:10px} button{b
-ackground:#0ff;color:#000;border:none;padding:10px 16px;font-weight:bold;white-space:nowrap} @media(max-width:
-600px){body{padding:12px}.input-area input{flex:1 1 100%;width:100%}.input-area button{flex:1 1 auto;padding:1
-0px 9px;font-size:10px}.row{font-size:10px}}
+
+:root {
+  --cyan: #00eeee;
+  --cyan-dim: #008b8b;
+  --green: #00ff32;
+  --black: #000;
+  --panel: #050a0a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--black);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--black);
+  color: var(--cyan);
+  font-family: "Trebuchet MS", Arial, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 1px solid var(--cyan);
+  background: var(--cyan);
+  color: #001010;
+  padding: 12px;
+  min-height: 54px;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+button:hover {
+  box-shadow: 0 0 12px var(--cyan);
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.app {
+  width: min(100%, 850px);
+  margin: 0 auto;
+  padding: 22px 20px 30px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.header h1 {
+  font-family: Georgia, serif;
+  font-size: 23px;
+  font-weight: normal;
+  margin: 0 0 6px;
+  text-shadow: 0 0 10px var(--cyan);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 4px;
+  color: #4daaaa;
+}
+
+.reactor-section {
+  text-align: center;
+}
+
+.reactor {
+  width: 210px;
+  height: 210px;
+  margin: 0 auto;
+  border: 2px solid var(--cyan);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow:
+    0 0 12px var(--cyan),
+    inset 0 0 16px #004c4c;
+  animation: reactor-glow 3s ease-in-out infinite alternate;
+}
+
+.reactor-core {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 28px var(--cyan);
+}
+
+.ready-text {
+  margin: 28px 0 4px;
+  font-size: 12px;
+  letter-spacing: 4px;
+}
+
+.diagnostics h2 {
+  margin: 0 0 12px;
+  font-family: Georgia, serif;
+  font-size: clamp(22px, 5vw, 32px);
+  font-weight: normal;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+  font-family: Georgia, serif;
+  font-size: 13px;
+}
+
+.status-value {
+  color: var(--green);
+  text-align: right;
+}
+
+.chat {
+  height: 200px;
+  overflow-y: auto;
+  border: 1px solid #163333;
+  background: #000;
+  padding: 12px;
+  margin: 14px 0;
+  box-shadow: inset 0 0 8px #001010;
+  overflow-wrap: anywhere;
+}
+
+.msg {
+  padding: 9px 10px;
+  margin: 0 0 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  border-left: 2px solid var(--cyan-dim);
+  background: #030b0b;
+  color: #c7ffff;
+}
+
+.msg.user {
+  border-left-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.msg.ai {
+  border-left-color: var(--green);
+}
+
+.msg.error {
+  border-left-color: #ff5a5a;
+  color: #ffaaaa;
+}
+
+.msg img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  margin-top: 8px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  gap: 10px;
+  align-items: stretch;
+}
+
+#msg {
+  min-width: 0;
+  width: 100%;
+  min-height: 54px;
+  padding: 12px;
+  background: #000;
+  color: var(--cyan);
+  border: 1px solid var(--cyan-dim);
+  outline: none;
+}
+
+#msg:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px #004b4b;
+}
+
+#msg::placeholder {
+  color: #777;
+}
+
+#send {
+  min-width: 92px;
+}
+
+#mic-btn,
+#cam-btn {
+  min-width: 54px;
+  font-size: 19px;
+}
+
+#clear-btn {
+  max-width: 110px;
+  min-width: 88px;
+  line-height: 1.25;
+}
+
+.footer {
+  margin-top: 28px;
+  color: #205858;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 3px;
+}
+
+@keyframes reactor-glow {
+  from {
+    box-shadow: 0 0 8px var(--cyan), inset 0 0 12px #004c4c;
+  }
+
+  to {
+    box-shadow: 0 0 24px var(--cyan), inset 0 0 20px #006060;
+  }
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 20px 25px 28px;
+  }
+
+  .header {
+    margin-bottom: 32px;
+  }
+
+  .reactor {
+    width: 205px;
+    height: 205px;
+  }
+
+  .chat {
+    height: 198px;
+  }
+
+  .controls {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 9px;
+  }
+
+  #msg {
+    grid-column: 1 / 2;
+  }
+
+  #send {
+    grid-column: 2 / 3;
+  }
+
+  #mic-btn {
+    grid-column: 3 / 4;
+  }
+
+  #cam-btn {
+    grid-column: 1 / 2;
+  }
+
+  #clear-btn {
+    grid-column: 2 / 4;
+    max-width: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .app {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .controls {
+    grid-template-columns: minmax(0, 1fr) 1fr;
+  }
+
+  #msg,
+  #send,
+  #mic-btn,
+  #cam-btn,
+  #clear-btn {
+    grid-column: auto;
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  #msg {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reactor {
+    animation: none;
+  }
+}
