@@ -6,7 +6,7 @@
 // Chat + Voice + Memory + Image Vision
 // ========================================
 
-// Keep your Episode 04 model names unchanged.
+// Keep Episode 04 model names unchanged.
 const MODELS = [
   'gemini-3.6-flash',
   'gemini-flash-latest'
@@ -15,7 +15,10 @@ const MODELS = [
 const MEMORY_KEY = 'jarvis_memory';
 const API_KEY_STORAGE = 'jarvis_key';
 
-// Page elements
+// ========================================
+// PAGE ELEMENTS
+// ========================================
+
 const chat = document.getElementById('chat');
 const input = document.getElementById('msg');
 const form = document.getElementById('message-form');
@@ -31,14 +34,49 @@ const voiceStatus = document.getElementById('voice-status');
 const memoryStatus = document.getElementById('memory-status');
 const systemStatus = document.getElementById('system-status');
 
-// Load saved conversation safely.
+// Report missing elements instead of silently failing.
+const requiredElements = {
+  chat,
+  input,
+  form,
+  sendBtn,
+  micBtn,
+  camBtn,
+  clearBtn,
+  imgInput
+};
+
+const missingElements = Object.entries(requiredElements)
+  .filter(([, element]) => !element)
+  .map(([name]) => name);
+
+if (missingElements.length > 0) {
+  console.error(
+    'J.A.R.V.I.S. is missing HTML elements:',
+    missingElements
+  );
+}
+
+// Safely update optional status elements.
+function setStatus(element, text) {
+  if (element) {
+    element.textContent = text;
+  }
+}
+
+// ========================================
+// CONVERSATION MEMORY
+// ========================================
+
 function loadMemory() {
   try {
     const saved = JSON.parse(
       localStorage.getItem(MEMORY_KEY) || '[]'
     );
 
-    if (!Array.isArray(saved)) return [];
+    if (!Array.isArray(saved)) {
+      return [];
+    }
 
     return saved.filter(message =>
       message &&
@@ -59,26 +97,37 @@ let busy = false;
 // ========================================
 
 function getApiKey() {
-  let key = localStorage.getItem(API_KEY_STORAGE);
+  try {
+    let key = localStorage.getItem(API_KEY_STORAGE);
 
-  if (key && key.trim()) {
-    return key.trim();
-  }
+    if (key && key.trim()) {
+      return key.trim();
+    }
 
-  key = prompt('Enter your Gemini API key:');
+    key = window.prompt('Enter your Gemini API key:');
 
-  if (!key || !key.trim()) {
+    if (!key || !key.trim()) {
+      addMessage(
+        'Please enter your Gemini API key before using J.A.R.V.I.S.',
+        'error'
+      );
+      return null;
+    }
+
+    key = key.trim();
+    localStorage.setItem(API_KEY_STORAGE, key);
+
+    return key;
+  } catch (error) {
+    console.error('API key storage error:', error);
+
     addMessage(
-      'Please enter your Gemini API key before using J.A.R.V.I.S.',
+      'Could not access browser storage. Check your browser settings.',
       'error'
     );
+
     return null;
   }
-
-  key = key.trim();
-  localStorage.setItem(API_KEY_STORAGE, key);
-
-  return key;
 }
 
 // ========================================
@@ -86,10 +135,15 @@ function getApiKey() {
 // ========================================
 
 function addMessage(text, type = 'ai') {
+  if (!chat) {
+    console.error('Cannot display message: #chat is missing.');
+    return null;
+  }
+
   const message = document.createElement('div');
 
   message.className = 'msg ' + type;
-  message.textContent = text;
+  message.textContent = String(text);
 
   chat.appendChild(message);
   chat.scrollTop = chat.scrollHeight;
@@ -98,19 +152,22 @@ function addMessage(text, type = 'ai') {
 }
 
 function renderMemory() {
-  chat.innerHTML = '';
+  if (!chat) return;
 
-  MEMORY.forEach(message => {
-    const type = message.role === 'user' ? 'user' : 'ai';
-    addMessage(message.text, type);
-  });
+  chat.innerHTML = '';
 
   if (MEMORY.length === 0) {
     addMessage(
       'J.A.R.V.I.S. online. How can I assist you?',
       'ai'
     );
+    return;
   }
+
+  MEMORY.forEach(message => {
+    const type = message.role === 'user' ? 'user' : 'ai';
+    addMessage(message.text, type);
+  });
 }
 
 function saveMemory() {
@@ -120,10 +177,7 @@ function saveMemory() {
       JSON.stringify(MEMORY)
     );
 
-    if (memoryStatus) {
-      memoryStatus.textContent = '● ACTIVE';
-    }
-
+    setStatus(memoryStatus, '● ACTIVE');
     return true;
   } catch (error) {
     console.error('Memory save failed:', error);
@@ -138,12 +192,12 @@ function saveMemory() {
 }
 
 // ========================================
-// GEMINI API
+// ASSISTANT PROFILE AND INSTRUCTIONS
 // ========================================
 
 const USER_PROFILE = {
-  name: "Praveen",
-  preferredName: "Praveen"
+  name: 'Praveen',
+  preferredName: 'Praveen'
 };
 
 const JARVIS_INSTRUCTIONS = `
@@ -154,6 +208,12 @@ If asked for the user's name, answer with their name from this profile.
 Use the conversation history to understand follow-up questions.
 Never claim you know personal information that is not provided.
 `;
+
+// ========================================
+// GEMINI API
+// ========================================
+
+async function callGemini(parts, history = []) {
   const apiKey = getApiKey();
 
   if (!apiKey) {
@@ -183,11 +243,13 @@ Never claim you know personal information that is not provided.
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-  systemInstruction: {
-    parts: [{ text: JARVIS_INSTRUCTIONS }]
-  },
-  contents: contents,
-  generationConfig: {
+            systemInstruction: {
+              parts: [
+                { text: JARVIS_INSTRUCTIONS }
+              ]
+            },
+            contents: contents,
+            generationConfig: {
               temperature: 0.7,
               maxOutputTokens: 800
             }
@@ -216,11 +278,10 @@ Never claim you know personal information that is not provided.
         return answer;
       }
 
-      lastError =
-        data?.promptFeedback?.blockReason
-          ? 'The request was blocked: ' +
-            data.promptFeedback.blockReason
-          : 'Gemini returned no text.';
+      lastError = data?.promptFeedback?.blockReason
+        ? 'The request was blocked: ' +
+          data.promptFeedback.blockReason
+        : 'Gemini returned no text.';
 
     } catch (error) {
       lastError = error.message || 'Network request failed.';
@@ -232,7 +293,6 @@ Never claim you know personal information that is not provided.
 }
 
 function getRecentHistory() {
-  // Gemini conversation history must alternate user/model roles.
   return MEMORY.slice(-12).map(message => ({
     role: message.role,
     parts: [{ text: message.text }]
@@ -244,14 +304,13 @@ function getRecentHistory() {
 // ========================================
 
 async function sendMessage() {
-  if (busy) return;
+  if (busy || !input) return;
 
   const promptText = input.value.trim();
 
   if (!promptText) return;
 
   input.value = '';
-
   await askJarvis(promptText);
 }
 
@@ -259,9 +318,11 @@ async function askJarvis(promptText) {
   if (busy) return;
 
   busy = true;
-  sendBtn.disabled = true;
-  engineStatus.textContent = '● PROCESSING';
-  systemStatus.textContent = 'PROCESSING COMMAND';
+
+  if (sendBtn) sendBtn.disabled = true;
+
+  setStatus(engineStatus, '● PROCESSING');
+  setStatus(systemStatus, 'PROCESSING COMMAND');
 
   addMessage(promptText, 'user');
 
@@ -278,39 +339,41 @@ async function askJarvis(promptText) {
       { role: 'model', text: reply }
     );
 
-    // Keep recent history within a reasonable size.
     MEMORY = MEMORY.slice(-40);
     saveMemory();
 
     addMessage(reply, 'ai');
     speak(reply);
 
-    engineStatus.textContent = '● OPERATIONAL';
-    systemStatus.textContent = 'SYSTEM READY';
+    setStatus(engineStatus, '● OPERATIONAL');
+    setStatus(systemStatus, 'SYSTEM READY');
 
   } catch (error) {
-    console.error(error);
+    console.error('J.A.R.V.I.S. chat error:', error);
 
     addMessage(
       'J.A.R.V.I.S. error: ' + error.message,
       'error'
     );
 
-    engineStatus.textContent = '● ERROR';
-    systemStatus.textContent = 'CHECK CONNECTION OR API KEY';
+    setStatus(engineStatus, '● ERROR');
+    setStatus(systemStatus, 'CHECK CONNECTION OR API KEY');
 
   } finally {
     busy = false;
-    sendBtn.disabled = false;
-    input.focus();
+
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) input.focus();
   }
 }
 
-// Submit using the EXECUTE button or Enter.
-form.addEventListener('submit', event => {
-  event.preventDefault();
-  sendMessage();
-});
+// Submit using the Execute button or Enter.
+if (form) {
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    sendMessage();
+  });
+}
 
 // ========================================
 // TEXT-TO-SPEECH
@@ -319,14 +382,19 @@ form.addEventListener('submit', event => {
 function speak(text) {
   if (!('speechSynthesis' in window)) return;
 
-  window.speechSynthesis.cancel();
+  try {
+    window.speechSynthesis.cancel();
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
-  utterance.rate = 1;
-  utterance.pitch = 1;
+    const utterance = new SpeechSynthesisUtterance(text);
 
-  window.speechSynthesis.speak(utterance);
+    utterance.lang = 'en-US';
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    window.speechSynthesis.speak(utterance);
+  } catch (error) {
+    console.error('Speech output error:', error);
+  }
 }
 
 // ========================================
@@ -341,21 +409,25 @@ let recognition = null;
 
 if (SpeechRecognitionAPI) {
   recognition = new SpeechRecognitionAPI();
+
   recognition.lang = 'en-US';
   recognition.continuous = false;
   recognition.interimResults = false;
 
   recognition.onstart = () => {
-    micBtn.textContent = '🔴';
-    voiceStatus.textContent = '● LISTENING';
-    systemStatus.textContent = 'LISTENING';
+    if (micBtn) micBtn.textContent = '🔴';
+
+    setStatus(voiceStatus, '● LISTENING');
+    setStatus(systemStatus, 'LISTENING');
   };
 
   recognition.onresult = event => {
     const transcript =
-      event.results[0][0].transcript.trim();
+      event.results?.[0]?.[0]?.transcript?.trim() || '';
 
-    input.value = transcript;
+    if (input) {
+      input.value = transcript;
+    }
 
     if (transcript) {
       sendMessage();
@@ -373,102 +445,110 @@ if (SpeechRecognitionAPI) {
   };
 
   recognition.onend = () => {
-    micBtn.textContent = '🎙️';
-    voiceStatus.textContent = '● READY';
-    systemStatus.textContent = 'SYSTEM READY';
+    if (micBtn) micBtn.textContent = '🎙️';
+
+    setStatus(voiceStatus, '● READY');
+    setStatus(systemStatus, 'SYSTEM READY');
   };
 
-  voiceStatus.textContent = '● READY';
+  setStatus(voiceStatus, '● READY');
 
 } else {
-  voiceStatus.textContent = '● NOT SUPPORTED';
+  setStatus(voiceStatus, '● NOT SUPPORTED');
 }
 
-micBtn.addEventListener('click', () => {
-  if (!recognition) {
-    addMessage(
-      'Speech recognition is not supported by this browser. Please type your command.',
-      'error'
-    );
-    return;
-  }
+if (micBtn) {
+  micBtn.addEventListener('click', () => {
+    if (!recognition) {
+      addMessage(
+        'Speech recognition is not supported by this browser. Please type your command.',
+        'error'
+      );
+      return;
+    }
 
-  try {
-    recognition.start();
-  } catch (error) {
-    addMessage(
-      'Could not start voice input. Please try again.',
-      'error'
-    );
-  }
-});
+    try {
+      recognition.start();
+    } catch (error) {
+      console.error('Could not start voice input:', error);
+
+      addMessage(
+        'Could not start voice input. Please try again.',
+        'error'
+      );
+    }
+  });
+}
 
 // ========================================
 // CAMERA / IMAGE VISION
 // ========================================
 
-camBtn.addEventListener('click', () => {
-  if (!imgInput) {
-    addMessage(
-      'Image input is missing from index.html.',
-      'error'
-    );
-    return;
-  }
+if (camBtn) {
+  camBtn.addEventListener('click', () => {
+    if (!imgInput) {
+      addMessage(
+        'Image input is missing from index.html.',
+        'error'
+      );
+      return;
+    }
 
-  imgInput.click();
-});
+    imgInput.click();
+  });
+}
 
-imgInput.addEventListener('change', async () => {
-  const file = imgInput.files?.[0];
+if (imgInput) {
+  imgInput.addEventListener('change', async () => {
+    const file = imgInput.files?.[0];
 
-  // Allow selecting the same photo again later.
-  imgInput.value = '';
+    // Permit selecting the same image again later.
+    imgInput.value = '';
 
-  if (!file) return;
+    if (!file) return;
 
-  if (!file.type.startsWith('image/')) {
-    addMessage('Please select a valid image.', 'error');
-    return;
-  }
+    if (!file.type.startsWith('image/')) {
+      addMessage('Please select a valid image.', 'error');
+      return;
+    }
 
-  // Avoid sending excessively large images.
-  if (file.size > 8 * 1024 * 1024) {
-    addMessage(
-      'This image is too large. Please select an image smaller than 8 MB.',
-      'error'
-    );
-    return;
-  }
+    if (file.size > 8 * 1024 * 1024) {
+      addMessage(
+        'This image is too large. Please select an image smaller than 8 MB.',
+        'error'
+      );
+      return;
+    }
 
-  if (busy) {
-    addMessage(
-      'J.A.R.V.I.S. is busy. Please wait before sending another image.',
-      'error'
-    );
-    return;
-  }
+    if (busy) {
+      addMessage(
+        'J.A.R.V.I.S. is busy. Please wait before sending another image.',
+        'error'
+      );
+      return;
+    }
 
-  const question =
-    input.value.trim() ||
-    'What do you see in this image? Describe it briefly.';
+    const question =
+      input?.value.trim() ||
+      'What do you see in this image? Describe it briefly.';
 
-  input.value = '';
+    if (input) input.value = '';
 
-  try {
-    const base64 = await readImageAsBase64(file);
+    try {
+      const base64 = await readImageAsBase64(file);
 
-    await askVision(base64, file.type, question);
+      await askVision(base64, file.type, question);
 
-  } catch (error) {
-    console.error('Image processing error:', error);
+    } catch (error) {
+      console.error('Image processing error:', error);
 
-    addMessage(
-      'Could not process the image: ' + error.message,
-      'error'
-    );
-  }
-});
+      addMessage(
+        'Could not process the image: ' + error.message,
+        'error'
+      );
+    }
+  });
+}
 
 function readImageAsBase64(file) {
   return new Promise((resolve, reject) => {
@@ -504,10 +584,12 @@ async function askVision(base64, mimeType, question) {
   if (busy) return;
 
   busy = true;
-  sendBtn.disabled = true;
-  camBtn.disabled = true;
-  engineStatus.textContent = '● ANALYZING IMAGE';
-  systemStatus.textContent = 'ANALYZING IMAGE';
+
+  if (sendBtn) sendBtn.disabled = true;
+  if (camBtn) camBtn.disabled = true;
+
+  setStatus(engineStatus, '● ANALYZING IMAGE');
+  setStatus(systemStatus, 'ANALYZING IMAGE');
 
   addMessage('Image selected. ' + question, 'user');
 
@@ -544,8 +626,8 @@ async function askVision(base64, mimeType, question) {
     addMessage(answer, 'ai');
     speak(answer);
 
-    engineStatus.textContent = '● OPERATIONAL';
-    systemStatus.textContent = 'SYSTEM READY';
+    setStatus(engineStatus, '● OPERATIONAL');
+    setStatus(systemStatus, 'SYSTEM READY');
 
   } catch (error) {
     console.error('Vision API error:', error);
@@ -555,13 +637,14 @@ async function askVision(base64, mimeType, question) {
       'error'
     );
 
-    engineStatus.textContent = '● ERROR';
-    systemStatus.textContent = 'CHECK IMAGE OR API';
+    setStatus(engineStatus, '● ERROR');
+    setStatus(systemStatus, 'CHECK IMAGE OR API');
 
   } finally {
     busy = false;
-    sendBtn.disabled = false;
-    camBtn.disabled = false;
+
+    if (sendBtn) sendBtn.disabled = false;
+    if (camBtn) camBtn.disabled = false;
   }
 }
 
@@ -569,53 +652,61 @@ async function askVision(base64, mimeType, question) {
 // CLEAR MEMORY
 // ========================================
 
-clearBtn.addEventListener('click', () => {
-  const confirmed = window.confirm(
-    'Are you sure you want to clear all saved J.A.R.V.I.S. conversation memory?'
+if (clearBtn) {
+  clearBtn.addEventListener('click', () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to clear all saved J.A.R.V.I.S. conversation memory?'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      localStorage.removeItem(MEMORY_KEY);
+      MEMORY = [];
+
+      if (chat) chat.innerHTML = '';
+
+      addMessage(
+        'Saved conversation memory cleared successfully.',
+        'ai'
+      );
+
+      setStatus(memoryStatus, '● ACTIVE');
+
+    } catch (error) {
+      console.error('Clear memory failed:', error);
+
+      addMessage(
+        'Could not clear memory: ' + error.message,
+        'error'
+      );
+    }
+  });
+}
+
+// ========================================
+// CONNECTION STATUS
+// ========================================
+
+function updateConnectionStatus() {
+  setStatus(
+    connectionStatus,
+    navigator.onLine ? '● ONLINE' : '● OFFLINE'
   );
+}
 
-  if (!confirmed) return;
+updateConnectionStatus();
 
-  try {
-    localStorage.removeItem(MEMORY_KEY);
-    MEMORY = [];
-
-    chat.innerHTML = '';
-
-    addMessage(
-      'Saved conversation memory cleared successfully.',
-      'ai'
-    );
-
-    memoryStatus.textContent = '● ACTIVE';
-
-  } catch (error) {
-    console.error('Clear memory failed:', error);
-
-    addMessage(
-      'Could not clear memory: ' + error.message,
-      'error'
-    );
-  }
-});
+window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('offline', updateConnectionStatus);
 
 // ========================================
 // INITIALIZE
 // ========================================
 
-connectionStatus.textContent = navigator.onLine
-  ? '● ONLINE'
-  : '● OFFLINE';
-
-window.addEventListener('online', () => {
-  connectionStatus.textContent = '● ONLINE';
-});
-
-window.addEventListener('offline', () => {
-  connectionStatus.textContent = '● OFFLINE';
-});
-
-engineStatus.textContent = '● OPERATIONAL';
-memoryStatus.textContent = '● ACTIVE';
+setStatus(engineStatus, '● OPERATIONAL');
+setStatus(memoryStatus, '● ACTIVE');
 
 renderMemory();
+
+console.log('J.A.R.V.I.S. Episode 05 script loaded.');
