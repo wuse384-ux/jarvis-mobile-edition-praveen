@@ -63,8 +63,12 @@ async function askGemini(p) {
 
 // ===== 4. SPEECH RECOGNITION (వినడం) =====
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const rec = new SR();
-rec.lang = 'en-US'; // Telugu కి 'te-IN'
+let rec = null;
+
+if (SR) {
+  rec = new SR();
+  rec.lang = 'en-US';
+} // Telugu కి 'te-IN'
 
 rec.onresult = (e) => {
   const t = e.results[0][0].transcript;
@@ -73,6 +77,11 @@ rec.onresult = (e) => {
 };
 
 micBtn.onclick = () => {
+  if (!rec) {
+    add('J.A.R.V.I.S: Speech recognition is not supported in this browser.', 'ai');
+    return;
+  }
+
   rec.start();
   micBtn.innerText = 'LISTENING...';
 };
