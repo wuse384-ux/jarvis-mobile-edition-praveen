@@ -1,12 +1,85 @@
-<!DOCTYPE html> <html> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width,
-initial-scale=1"> <title>J.A.R.V.I.S</title> <link rel="stylesheet" href="style.css"> </head> <body> <header><
-h1>J.A.R.V.I.S</h1><p>PERSONAL AI ASSISTANT</p></header> <div class="core"> <div class="ring r1"></div> <div c
-lass="ring r2"></div> <div class="center"></div> </div> <p class="core-text">SYSTEM READY</p> <div class="stat
-us"> <h2>SYSTEM DIAGNOSTICS</h2> <div class="row"><span>AI ENGINE</span><b class="on">● OPERATIONAL</b></div>
-<div class="row"><span>CONNECTION</span><b class="on">● ONLINE</b></div> <div class="row"><span>VOICE INTERFAC
-E</span><b class="on">● READY</b></div> <div class="row"><span>LONG-TERM MEMORY</span><b class="on">● ACTIVE</
-b></div> </div> <div class="chat" id="chat"></div> <div class="input-area"> <input id="msg" placeholder="Enter
-a command for J.A.R.V.I.S..."> <button id="send">EXECUTE</button> <button id="mic-btn" aria-label="Activate vo
-ice input">🎙️</button> <button id="cam-btn" aria-label="Analyze image">📷</button> <button id="clear-btn">CLEA
-R MEMORY</button> <input id="img-input" type="file" accept="image/*" style="display:none"> </div> <script src
-="script.js"></script> </body> </html>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>J.A.R.V.I.S. | Personal AI Assistant</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <main class="app">
+    <header class="header">
+      <h1>&lt; h1&gt; J.A.R.V.I.S</h1>
+      <p class="subtitle">PERSONAL AI ASSISTANT</p>
+    </header>
+
+    <section class="reactor-section" aria-label="System status">
+      <div class="reactor">
+        <div class="reactor-core"></div>
+      </div>
+      <p class="ready-text" id="system-status">SYSTEM READY</p>
+    </section>
+
+    <section class="diagnostics">
+      <h2>SYSTEM DIAGNOSTICS</h2>
+
+      <div class="status-row">
+        <span>AI ENGINE</span>
+        <span class="status-value" id="engine-status">● STANDBY</span>
+      </div>
+
+      <div class="status-row">
+        <span>CONNECTION</span>
+        <span class="status-value" id="connection-status">● ONLINE</span>
+      </div>
+
+      <div class="status-row">
+        <span>VOICE INTERFACE</span>
+        <span class="status-value" id="voice-status">● CHECKING</span>
+      </div>
+
+      <div class="status-row">
+        <span>LONG-TERM MEMORY</span>
+        <span class="status-value" id="memory-status">● ACTIVE</span>
+      </div>
+    </section>
+
+    <section
+      id="chat"
+      class="chat"
+      aria-label="Conversation"
+      aria-live="polite"
+    ></section>
+
+    <form id="message-form" class="controls">
+      <input
+        id="msg"
+        type="text"
+        placeholder="Enter a command for J.A.R.V.I.S..."
+        autocomplete="off"
+        aria-label="Message"
+      >
+
+      <button id="send" type="submit">EXECUTE</button>
+      <button id="mic-btn" type="button" aria-label="Voice input">🎙️</button>
+      <button id="cam-btn" type="button" aria-label="Analyze an image">📷</button>
+      <button id="clear-btn" type="button">CLEAR MEMORY</button>
+    </form>
+
+    <input
+      type="file"
+      id="img-input"
+      accept="image/*"
+      capture="environment"
+      hidden
+    >
+
+    <p class="footer">J.A.R.V.I.S. MOBILE SYSTEM</p>
+  </main>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
