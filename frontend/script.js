@@ -183,8 +183,11 @@ Never claim you know personal information that is not provided.
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            contents: contents,
-            generationConfig: {
+  systemInstruction: {
+    parts: [{ text: JARVIS_INSTRUCTIONS }]
+  },
+  contents: contents,
+  generationConfig: {
               temperature: 0.7,
               maxOutputTokens: 800
             }
