@@ -141,7 +141,19 @@ function saveMemory() {
 // GEMINI API
 // ========================================
 
-async function callGemini(parts, history = []) {
+const USER_PROFILE = {
+  name: "Praveen",
+  preferredName: "Praveen"
+};
+
+const JARVIS_INSTRUCTIONS = `
+You are J.A.R.V.I.S., a personal AI assistant.
+The user's name is ${USER_PROFILE.name}.
+Address the user as ${USER_PROFILE.preferredName} when natural.
+If asked for the user's name, answer with their name from this profile.
+Use the conversation history to understand follow-up questions.
+Never claim you know personal information that is not provided.
+`;
   const apiKey = getApiKey();
 
   if (!apiKey) {
